@@ -11,7 +11,7 @@ DeepSeek Harness (`dsh`) web 界面增强插件 — 润色、提示词库、预�
 ## 安装
 
 ```bash
-git clone https://github.com/<your-org>/dsh-harness-ui-enhancer
+git clone https://github.com/dcrzsy/dsh-harness-ui-enhancer
 cd dsh-harness-ui-enhancer
 bash install.sh
 ```
@@ -80,10 +80,35 @@ fuser -k 3080/tcp && nohup dsh web &   # 重启 dsh web
 
 ---
 
-## 兼容性与已知问题
+## 兼容性与已知问题（重要，安装前必读）
+
+### 版本锁定声明
+
+本插件的 **布局增强**（AI 消息无背景、用户气泡自适应、长消息折叠、面板让位、宽度设置）通过运行时 CSS 注入实现，选择器依赖 dsh 客户端 bundle 的 **CSS-in-JS 哈希类名**（如 `wSkVaW_*` / `gdEzaW_*` / `nArs4W_*`）。这些类名随 dsh 每次构建可能变化。
+
+- **实测版本**：`0.1.0-rc.7`、`0.1.1-rc.2`
+- **布局增强失效表现**：安装后 AI/用户消息样式无变化（无错误提示，功能静默不生效）
+- **处理方式**：布局失效时，其余功能（润色 / 提示词库 / 建议条 / MCP / 自动化 / 标题）不受影响；请提交 issue 附上你的 dsh 版本与 `document.querySelector('*[class]').className` 中对应的消息区类名前缀，我们会更新注入选择器。
+
+### 其他已知问题
 
 - **dsh 0.1.1-rc.2 的 modlens 适配器缺少 `prepareCall`**：插件启动时自动为缺失的适配器补丁（包装 `stream` 实现），使 `/polish`、`/suggest`、标题生成直接使用**用户会话选择的模型**；若补丁不可用则自动 fallback 到内置 `deepseek-official`。
-- **bundle CSS 类名**随 dsh 版本可能变化（`wSkVaW` / `gdEzaW` 等为运行时生成的哈希类名）；若升级 dsh 后发现布局增强失效，请反馈对应版本的类名。
+- **会话标题 provider** 需要 `@deepseek-ai/dsh-session-title-llm`（install.sh 自动链接）。
+
+---
+
+## 安装后自检
+
+```bash
+# 1. 插件已加载（后端日志应出现）
+grep "patched prepareCall" ~/.dsh/web.log   # 或 dsh 日志文件
+
+# 2. 润色 API 可用（无 sessionId 时返回友好报错）
+curl -s -X POST http://127.0.0.1:3080/polish -H "content-type: application/json" -d '{"text":"测试"}'
+# 期望: no model route configured: open a session and pick a model first
+
+# 3. 浏览器：composer 工具栏应出现 提示词库 / 润色 按钮，侧边栏出现 MCP / 自动化 入口
+```
 
 ---
 

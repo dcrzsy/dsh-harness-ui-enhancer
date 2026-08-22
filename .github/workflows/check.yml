@@ -1,0 +1,22 @@
+name: Syntax Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify plugin files parse
+        run: |
+          node --check harness-ui-enhancer/lib/index.js
+          node --check harness-ui-enhancer/lib/polish-routes.js
+          node --check harness-ui-enhancer/lib/client.js
+      - name: Verify install.sh syntax
+        run: bash -n install.sh
