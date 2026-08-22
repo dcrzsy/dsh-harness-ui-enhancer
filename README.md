@@ -10,20 +10,34 @@ DeepSeek Harness (`dsh`) web 界面增强插件 — 润色、提示词库、预�
 
 ## 安装
 
+### 方式一：dsh 官方插件命令（推荐）
+
+```bash
+dsh plugin --profile web add github:dcrzsy/dsh-harness-ui-enhancer
+```
+
+安装后需要补一个 pnpm 解析不到的依赖（它位于全局 dsh 包内）：
+
+```bash
+DSH=$(dirname "$(dirname "$(node -e 'console.log(require.resolve("@deepseek-ai/dsh/package.json"))')")")
+ln -sfn "$DSH/node_modules/@deepseek-ai/dsh-session-title"        ~/.dsh/profiles/web/node_modules/@deepseek-ai/
+ln -sfn "$DSH/node_modules/@deepseek-ai/dsh-session-title-llm"    ~/.dsh/profiles/web/node_modules/@deepseek-ai/
+```
+
+> `dsh plugin` 是官方插件管理命令（转发到 profile 目录的 pnpm），与
+> `dsh-power-button`、`dsh-better-sidebar` 等社区插件的安装方式一致。
+
+### 方式二：一键脚本
+
 ```bash
 git clone https://github.com/dcrzsy/dsh-harness-ui-enhancer
 cd dsh-harness-ui-enhancer
 bash install.sh
 ```
 
-`install.sh` 自动完成：
+`install.sh` 自动完成：`dsh plugin add` 标准安装 → 链接 `dsh-session-title-llm` 依赖 → 全文件语法验证。
 
-1. 定位 dsh web profile（`$DSH_HOME` 或 `~/.dsh/profiles/web`）
-2. 复制插件到 profile 的 `node_modules/harness-ui-enhancer/`
-3. 从全局 `@deepseek-ai/dsh` 链接 `dsh-session-title-llm` 依赖
-4. 全文件 `node --check` 语法验证
-
-安装后：
+### 安装后
 
 ```bash
 fuser -k 3080/tcp && nohup dsh web &   # 重启 dsh web
@@ -31,8 +45,8 @@ fuser -k 3080/tcp && nohup dsh web &   # 重启 dsh web
 
 浏览器 **Ctrl+Shift+R** 硬刷新即可。
 
-> 插件通过自带的 `cordis.patch.yml`（`dsh.bundle.patch`）自动挂载，无需手动改任何配置。
-> 卸载：删除 `~/.dsh/profiles/web/node_modules/harness-ui-enhancer` 后重启 dsh web。
+> 插件通过自带的 `cordis.patch.yml`（`dsh.bundle.patch`）自动挂载，无需手动改配置。
+> 卸载：`dsh plugin --profile web remove harness-ui-enhancer` 后重启 dsh web。
 
 ---
 
@@ -117,13 +131,15 @@ curl -s -X POST http://127.0.0.1:3080/polish -H "content-type: application/json"
 插件本体在 `harness-ui-enhancer/`：
 
 ```
-harness-ui-enhancer/
+.
 ├── package.json          # dsh.bundle.patch 声明（自动挂载）
 ├── cordis.patch.yml      # 插件挂载 + 禁用官方 session-title-llm
-└── lib/
-    ├── index.js          # host 侧：路由 / 定时器 / 标题 provider / 适配器补丁
-    ├── client.js         # client 侧：全部 UI 组件 + 注入样式（构建产物）
-    └── polish-routes.js  # /polish /suggest /prompt-library 路由
+├── lib/
+│   ├── index.js          # host 侧：路由 / 定时器 / 标题 provider / 适配器补丁
+│   ├── client.js         # client 侧：全部 UI 组件 + 注入样式（构建产物）
+│   └── polish-routes.js  # /polish /suggest /prompt-library 路由
+├── install.sh            # 一键安装辅助
+└── .github/workflows/    # CI：语法检查
 ```
 
 `client.js` 是对 dsh 官方 client bundle 的**注入产物**（通过 slot 注入 + 运行时 CSS，不修改 bundle 源文件）。重注入脚本与本地开发流程见内部 `dsh-patches/`（未随仓库发布）。

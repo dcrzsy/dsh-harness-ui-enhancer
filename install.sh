@@ -2,8 +2,9 @@
 # =============================================================================
 # harness-ui-enhancer — one-command installer for DeepSeek Harness (dsh) web
 #
-#   Installs the plugin into the active dsh web profile, links the session-title
-#   dependency from the global dsh package, and verifies every file parses.
+#   Standard install: adds the plugin via the official `dsh plugin` (pnpm) path,
+#   then links the @deepseek-ai/dsh-session-title-llm dependency (which pnpm
+#   cannot resolve on its own — it lives inside the global dsh package).
 #
 #   Usage:  bash install.sh            (uses ~/.dsh, auto-detects global dsh)
 #           DSH_HOME=... bash install.sh
@@ -13,7 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="$SCRIPT_DIR/harness-ui-enhancer"
+PLUGIN_DIR="$SCRIPT_DIR"
 
 # ---- 1. Locate the dsh web profile -----------------------------------------
 if [[ -n "${DSH_HOME:-}" ]]; then
@@ -52,15 +53,21 @@ DSH_GLOBAL="$(dirname "$GLOBAL_DSH")"
 # The session-title packages live inside the dsh package's own node_modules.
 DSH_DEPS="$DSH_GLOBAL/node_modules/@deepseek-ai"
 
-# ---- 3. Copy the plugin -----------------------------------------------------
-echo "[1/4] installing plugin into $PROFILE/..."
-mkdir -p "$NM/harness-ui-enhancer"
-cp -f "$PLUGIN_DIR/package.json"   "$NM/harness-ui-enhancer/package.json"
-cp -f "$PLUGIN_DIR/cordis.patch.yml" "$NM/harness-ui-enhancer/cordis.patch.yml"
-mkdir -p "$NM/harness-ui-enhancer/lib"
-cp -f "$PLUGIN_DIR/lib/index.js"        "$NM/harness-ui-enhancer/lib/index.js"
-cp -f "$PLUGIN_DIR/lib/client.js"       "$NM/harness-ui-enhancer/lib/client.js"
-cp -f "$PLUGIN_DIR/lib/polish-routes.js" "$NM/harness-ui-enhancer/lib/polish-routes.js"
+# ---- 3. Install the plugin (official pnpm path) ----------------------------
+echo "[1/4] installing plugin via dsh plugin (pnpm)..."
+if command -v dsh >/dev/null 2>&1; then
+  dsh plugin --profile web add "$SCRIPT_DIR" 2>&1 || dsh plugin --profile web add "github:dcrzsy/dsh-harness-ui-enhancer" 2>&1
+else
+  # Fallback: manual copy (works without the dsh CLI)
+  echo "  dsh CLI not found — copying plugin files directly"
+  mkdir -p "$NM/harness-ui-enhancer"
+  cp -f "$PLUGIN_DIR/package.json"      "$NM/harness-ui-enhancer/package.json"
+  cp -f "$PLUGIN_DIR/cordis.patch.yml"  "$NM/harness-ui-enhancer/cordis.patch.yml"
+  mkdir -p "$NM/harness-ui-enhancer/lib"
+  cp -f "$PLUGIN_DIR/lib/index.js"         "$NM/harness-ui-enhancer/lib/index.js"
+  cp -f "$PLUGIN_DIR/lib/client.js"        "$NM/harness-ui-enhancer/lib/client.js"
+  cp -f "$PLUGIN_DIR/lib/polish-routes.js" "$NM/harness-ui-enhancer/lib/polish-routes.js"
+fi
 
 # ---- 4. Link the session-title dependency -----------------------------------
 echo "[2/4] linking @deepseek-ai/dsh-session-title-llm..."
