@@ -34,5 +34,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dcrzsy/dsh-harness-ui-enhancer.git"
-  }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ]
 }
