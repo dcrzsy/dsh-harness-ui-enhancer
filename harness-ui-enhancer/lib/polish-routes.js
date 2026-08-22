@@ -1,0 +1,270 @@
+import { BlockAssembler, createUserMessage } from "@deepseek-ai/dsh-llm";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import z from "@deepseek-ai/schemastery";
+/** Polish API for the browser composer: rewrite a draft with the session LLM. */
+const name = "polish";
+/** Services required: the web server (route), the LLM runtime, and sessions (route fallback). */
+const inject = ["webServer", "llm", "sessions"];
+/** Route, framing, byte, token, and timeout policy. */
+const Config = z.object({
+	provider: z.string(),
+	model: z.string(),
+	maxInputBytes: z.number().default(32768),
+	maxOutputTokens: z.number().default(2048),
+	timeoutMs: z.number().default(30000)
+});
+/** Resolve the prompt-library JSON document path (default: ~/.dsh/prompts.json). */
+function libraryPath() {
+	const root = process.env.DSH_HOME ?? join(homedir(), ".dsh");
+	return join(root, "prompts.json");
+}
+/** Read the persisted prompt list (absent/corrupt file yields an empty list). */
+function readLibrary() {
+	try {
+		const raw = readFileSync(libraryPath(), "utf8");
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter((item) => item !== null && typeof item === "object" && typeof item.id === "string" && typeof item.title === "string" && typeof item.text === "string");
+	} catch {
+		return [];
+	}
+}
+/** Write the prompt list atomically (tmp file + rename). */
+function writeLibrary(items) {
+	const path = libraryPath();
+	mkdirSync(join(path, ".."), { recursive: true });
+	const tmp = path + ".tmp";
+	writeFileSync(tmp, JSON.stringify(items, null, 2));
+	renameSync(tmp, path);
+}
+/**
+* Mount the /polish and /prompt-library JSON endpoints.
+* /polish body: { text, requirement?, sessionId? } -> { ok: true, text }.
+* /prompt-library: GET -> { ok: true, items }; POST { items } -> { ok: true }.
+* @param ctx - host context with webServer, llm, and sessions services.
+* @param config - validated route and call policy.
+*/
+function apply(ctx, config) {
+	const disposes = [];
+	disposes.push(ctx.webServer.register({
+		kind: "prefix",
+		path: "/prompt-library",
+		handler: async (req, res) => {
+			if (req.method === "GET") {
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: true, items: readLibrary() }));
+				return;
+			}
+			const chunks = [];
+			for await (const chunk of req) chunks.push(chunk);
+			let body;
+			try {
+				body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+			} catch {
+				res.writeHead(400);
+				res.end("bad json");
+				return;
+			}
+			const items = body?.items;
+			if (!Array.isArray(items)) {
+				res.writeHead(400);
+				res.end("items must be an array");
+				return;
+			}
+			try {
+				writeLibrary(items.filter((item) => item !== null && typeof item === "object" && typeof item.id === "string" && typeof item.title === "string" && typeof item.text === "string"));
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: true }));
+			} catch (error) {
+				res.writeHead(500, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+			}
+		}
+	}, "dsh-polish: /prompt-library route"));
+	disposes.push(ctx.webServer.register({
+		kind: "prefix",
+		path: "/suggest",
+		handler: async (req, res) => {
+			const chunks = [];
+			for await (const chunk of req) chunks.push(chunk);
+			let body;
+			try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { res.writeHead(400); res.end("bad json"); return; }
+			const text = typeof body?.text === "string" ? body.text.trim() : "";
+			if (text === "") { res.writeHead(400); res.end("empty text"); return; }
+			const route = resolveRoute(ctx, config, body);
+			if (route === void 0) { res.writeHead(400); res.end("no model route configured: open a session and pick a model first"); return; }
+			try {
+				const suggestions = await suggestReplies(ctx, config, route, text);
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: true, suggestions }));
+			} catch (error) {
+				res.writeHead(500, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+			}
+		}
+	}, "ui-enhancer: /suggest route"));
+	disposes.push(ctx.webServer.register({
+		kind: "prefix",
+		path: "/polish",
+		handler: async (req, res) => {
+			const chunks = [];
+			for await (const chunk of req) chunks.push(chunk);
+			let body;
+			try {
+				body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+			} catch {
+				res.writeHead(400);
+				res.end("bad json");
+				return;
+			}
+			const text = typeof body?.text === "string" ? body.text : "";
+			const requirement = typeof body?.requirement === "string" ? body.requirement.trim() : "";
+			if (text.trim() === "") {
+				res.writeHead(400);
+				res.end("empty text");
+				return;
+			}
+			if (Buffer.byteLength(text, "utf8") > config.maxInputBytes) {
+				res.writeHead(413);
+				res.end("text too long");
+				return;
+			}
+			const route = resolveRoute(ctx, config, body);
+			if (route === void 0) {
+				res.writeHead(400);
+				res.end("no model route configured: open a session and pick a model first");
+				return;
+			}
+			try {
+				const result = await polishText(ctx, config, route, text, requirement);
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: true, text: result }));
+			} catch (error) {
+				res.writeHead(500, { "content-type": "application/json" });
+				res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+			}
+		}
+	}, "dsh-polish: /polish route"));
+	return disposes;
+}
+/**
+* Prefer the caller session's own model route; fall back to the configured pair.
+* @param ctx - host context exposing the sessions service.
+* @param config - validated plugin policy.
+* @param body - parsed request body.
+* @returns the provider/model pair, or undefined when neither source has one.
+*/
+function resolveRoute(ctx, config, body) {
+	if (config.provider !== void 0 && config.model !== void 0) return {
+		provider: config.provider,
+		model: config.model
+	};
+	const sessionId = typeof body?.sessionId === "string" ? body.sessionId : void 0;
+	if (sessionId !== void 0) {
+		const session = ctx.sessions.get(sessionId);
+		const header = session?.requestHeader?.();
+		const route = header?.config;
+		if (route !== void 0 && typeof route.provider === "string" && typeof route.model === "string") return {
+			provider: route.provider,
+			model: route.model
+		};
+	}
+	return void 0;
+}
+/**
+* Run one polishing call: system framing, streamed completion, text-only output.
+* @param ctx - host context exposing the LLM runtime.
+* @param config - validated call policy.
+* @param route - resolved provider/model pair.
+* @param text - draft text to polish.
+* @param requirement - optional user requirement (empty = default style).
+* @returns the polished text.
+*/
+
+/** Built-in route used when the session's own provider adapter is not usable
+ * through the public llm.stream API (e.g. adapters that predate prepareCall). */
+const FALLBACK_ROUTE = { provider: "deepseek-official", model: "deepseek-v4-flash" };
+
+/** Stream once with one route; throws on finish error, returns text blocks. */
+async function streamRoute(ctx, config, route, messages, system) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+	try {
+		const assembler = new BlockAssembler();
+		let __finish = null;
+		for await (const chunk of ctx.llm.stream({
+			provider: route.provider,
+			model: route.model,
+			messages,
+			system,
+			maxTokens: config.maxOutputTokens,
+			signal: controller.signal
+		})) { if (chunk.type === "finish") __finish = chunk; assembler.push(chunk); }
+		if (__finish && __finish.reason && __finish.reason.kind === "error") throw new Error(`llm stream failed on ${route.provider}/${route.model}: ${__finish.reason.failure?.message ?? "unknown"}`);
+		return assembler.blocks();
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function polishText(ctx, config, route, text, requirement) {
+	const system = [
+		"You are a writing assistant that polishes the user's draft message.",
+		"Return ONLY the polished text, with no quotes, prefixes, explanations, Markdown, or extra content.",
+		"Preserve the original meaning and language; improve grammar, wording, and flow.",
+		requirement === "" ? "Polish with the default natural style." : "Polish according to this requirement: " + requirement
+	].join("\n");
+	const messages = [createUserMessage({
+		content: [{
+			type: "text",
+			text
+		}],
+		source: {
+			kind: "plugin",
+			plugin: "dsh-polish"
+		}
+	})];
+		let blocks;
+		try {
+			blocks = await streamRoute(ctx, config, route, messages, system);
+		} catch (error) {
+			console.error("[ui-enhancer] polish route failed, falling back:", error.message);
+			blocks = await streamRoute(ctx, config, FALLBACK_ROUTE, messages, system);
+		}
+		const result = blocks.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
+		if (result === "") throw new Error("polish: model produced no text");
+		return result;
+}
+
+async function suggestReplies(ctx, config, route, text) {
+	const system = [
+		"You predict what the user will reply next in a coding-assistant chat.",
+		"Given the assistant's last message, return THREE short, natural user replies.",
+		"Output ONLY a JSON array of three strings, e.g. [\u201c继续\u201d, \u201c好的，继续\u201d, \u201c解释一下原理\u201d]. No Markdown fences, no explanations.",
+		"Keep each reply concise (under 20 characters in the user's language) and directly actionable."
+	].join(String.fromCharCode(10));
+	const messages = [createUserMessage({
+		content: [{ type: "text", text }],
+		source: { kind: "plugin", plugin: "ui-enhancer" }
+	})];
+		let blocks;
+		try {
+			blocks = await streamRoute(ctx, config, route, messages, system);
+		} catch (error) {
+			console.error("[ui-enhancer] suggest route failed, falling back:", error.message);
+			blocks = await streamRoute(ctx, config, FALLBACK_ROUTE, messages, system);
+		}
+		const raw = blocks.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
+		if (raw === "") throw new Error("suggest: model produced no text");
+		const stripped = raw.replace(/^\s*\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60\s*$/, "").trim();
+		let parsed;
+		try { parsed = JSON.parse(stripped); } catch { parsed = null; }
+		if (!Array.isArray(parsed)) throw new Error("suggest: model output was not a JSON array");
+		const suggestions = parsed.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()).slice(0, 3);
+		if (suggestions.length === 0) throw new Error("suggest: no valid suggestions produced");
+		return suggestions;
+}
+
+export { Config, apply, inject, name };

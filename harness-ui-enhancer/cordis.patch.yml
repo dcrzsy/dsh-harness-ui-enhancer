@@ -1,0 +1,10 @@
+# Harness UI Enhancer bundle patch.
+# 1. Mount the enhancer plugin itself.
+# 2. Disable the bundled first-prompt session-title provider; this plugin
+#    registers an all-prompts + created-at-suffix provider instead
+#    (restate-override: later patch rows win per id).
+- insert:
+    - id: ui-enhancer
+      name: harness-ui-enhancer
+- id: session-title-llm
+  disabled: true

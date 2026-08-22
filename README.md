@@ -1,0 +1,112 @@
+# harness-ui-enhancer
+
+DeepSeek Harness (`dsh`) web 界面增强插件 — 润色、提示词库、预测回复、宽度/字号设置、MCP 与定时自动化面板。
+
+- **安装形态**：100% 插件注入（slot / shell.overlay / settings / sessionTitle 官方机制），**零 bundle 补丁**
+- **兼容版本**：`dsh >= 0.1.0-rc.7`（已实测 0.1.1-rc.2）
+- **许可证**：MIT
+
+---
+
+## 安装
+
+```bash
+git clone https://github.com/<your-org>/dsh-harness-ui-enhancer
+cd dsh-harness-ui-enhancer
+bash install.sh
+```
+
+`install.sh` 自动完成：
+
+1. 定位 dsh web profile（`$DSH_HOME` 或 `~/.dsh/profiles/web`）
+2. 复制插件到 profile 的 `node_modules/harness-ui-enhancer/`
+3. 从全局 `@deepseek-ai/dsh` 链接 `dsh-session-title-llm` 依赖
+4. 全文件 `node --check` 语法验证
+
+安装后：
+
+```bash
+fuser -k 3080/tcp && nohup dsh web &   # 重启 dsh web
+```
+
+浏览器 **Ctrl+Shift+R** 硬刷新即可。
+
+> 插件通过自带的 `cordis.patch.yml`（`dsh.bundle.patch`）自动挂载，无需手动改任何配置。
+> 卸载：删除 `~/.dsh/profiles/web/node_modules/harness-ui-enhancer` 后重启 dsh web。
+
+---
+
+## 功能清单
+
+### 1. 输入增强（composer）
+
+| 功能 | 机制 | 位置 |
+|---|---|---|
+| **润色** | `/polish` API，用当前会话的模型重写草稿（默认润色 / 自定义要求润色） | `conversation.input.left` 按钮 |
+| **提示词库** | `/prompt-library` API，持久化 `~/.dsh/prompts.json`；支持分组 / 搜索 / 增删改 / 一键插入 | `conversation.input.left` 按钮 |
+| **预测回复（建议条）** | `/suggest` API，基于最后一条 AI 回复预测 3 条用户回复，点击即填入 | `conversation.input.dock` |
+
+### 2. 布局与宽度（设置页 + 运行时）
+
+| 功能 | 说明 |
+|---|---|
+| **对话内容宽度滑块** | 60%–200%（100%=748px，200% 占满可用宽），localStorage 持久化 |
+| **对话字号滑块** | 12–20px，消息区字号 + 行高联动 |
+| **AI 消息占满消息列** | 无背景卡片、`width:100%` 消除右侧空白 |
+| **用户消息自适应宽度** | `fit-content + max-width:100%`：内容少小气泡、内容多撑满整列 |
+| **用户长消息折叠** | 渲染行 > 5 行自动折叠，点击展开/收起（含历史消息） |
+| **面板打开时消息区让位** | 工作台面板 / 侧边栏打开时消息列自适应，不重叠不压缩 |
+| **hero 页面适配** | hero composer 固定底部、headline 置顶 |
+
+### 3. 会话标题
+
+- 自定义标题 provider（所有消息触发）+ **创建时间戳后缀**（`-YYYYMMDDHHmmss`）
+- 自动禁用官方 `session-title-llm`（通过 bundle.patch）
+
+### 4. MCP 服务器管理（侧边栏 → 面板）
+
+- 列表 / 添加 / 移除 `dsh-mcp-client` 服务器条目（stdio / http）
+- **合并写入** `~/.dsh/profiles/web/cordis.patch.yml`，保留用户其他配置，dsh 热应用
+
+### 5. 定时自动化任务（侧边栏 → 面板）
+
+- 任务字段：任务名 / 工作区 / 提示词 / 执行频率（分钟）
+- 到点自动新建会话并发送预设提示词（spawn 子代理）
+- 运行历史（时间 / 成功失败 / 失败原因 / 会话 ID），持久化 `enhancer-tasks.json`
+
+### 6. UI 修复
+
+- **hero 菜单 overlay 修复**：下拉菜单覆盖输入框时自动限高滚动（不影响模型选择等短菜单）
+
+---
+
+## 兼容性与已知问题
+
+- **dsh 0.1.1-rc.2 的 modlens 适配器缺少 `prepareCall`**：插件启动时自动为缺失的适配器补丁（包装 `stream` 实现），使 `/polish`、`/suggest`、标题生成直接使用**用户会话选择的模型**；若补丁不可用则自动 fallback 到内置 `deepseek-official`。
+- **bundle CSS 类名**随 dsh 版本可能变化（`wSkVaW` / `gdEzaW` 等为运行时生成的哈希类名）；若升级 dsh 后发现布局增强失效，请反馈对应版本的类名。
+
+---
+
+## 开发
+
+插件本体在 `harness-ui-enhancer/`：
+
+```
+harness-ui-enhancer/
+├── package.json          # dsh.bundle.patch 声明（自动挂载）
+├── cordis.patch.yml      # 插件挂载 + 禁用官方 session-title-llm
+└── lib/
+    ├── index.js          # host 侧：路由 / 定时器 / 标题 provider / 适配器补丁
+    ├── client.js         # client 侧：全部 UI 组件 + 注入样式（构建产物）
+    └── polish-routes.js  # /polish /suggest /prompt-library 路由
+```
+
+`client.js` 是对 dsh 官方 client bundle 的**注入产物**（通过 slot 注入 + 运行时 CSS，不修改 bundle 源文件）。重注入脚本与本地开发流程见内部 `dsh-patches/`（未随仓库发布）。
+
+---
+
+## 数据文件（勿提交 / 勿外发）
+
+- `~/.dsh/prompts.json` — 提示词库（可能含环境敏感信息）
+- `~/.dsh/profiles/web/enhancer-tasks.json` — 自动化任务
+- `~/.dsh/profiles/web/cordis.patch.yml` — MCP 合并写入目标
