@@ -13,7 +13,7 @@ DeepSeek Harness (`dsh`) web 界面增强插件 — 润色、提示词库、预�
 ### 方式一：dsh 官方插件命令（推荐）
 
 ```bash
-dsh plugin --profile web add github:dcrzsy/dsh-dsh-enhance-tool
+dsh plugin --profile web add github:dcrzsy/dsh-enhance-tool
 ```
 
 安装后需要补一个 pnpm 解析不到的依赖（它位于全局 dsh 包内）：
@@ -30,8 +30,8 @@ ln -sfn "$DSH/node_modules/@deepseek-ai/dsh-session-title-llm"    ~/.dsh/profile
 ### 方式二：一键脚本
 
 ```bash
-git clone https://github.com/dcrzsy/dsh-dsh-enhance-tool
-cd dsh-dsh-enhance-tool
+git clone https://github.com/dcrzsy/dsh-enhance-tool
+cd dsh-enhance-tool
 bash install.sh
 ```
 

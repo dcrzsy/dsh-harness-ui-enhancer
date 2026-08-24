@@ -30,10 +30,10 @@
   },
   "license": "MIT",
   "description": "DeepSeek Harness (dsh) web UI enhancer — polish, prompt library, suggested replies, width/font settings, MCP & automation panels.",
-  "homepage": "https://github.com/dcrzsy/dsh-dsh-enhance-tool",
+  "homepage": "https://github.com/dcrzsy/dsh-enhance-tool",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dcrzsy/dsh-dsh-enhance-tool.git"
+    "url": "git+https://github.com/dcrzsy/dsh-enhance-tool.git"
   },
   "files": [
     "lib",

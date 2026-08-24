@@ -56,7 +56,7 @@ DSH_DEPS="$DSH_GLOBAL/node_modules/@deepseek-ai"
 # ---- 3. Install the plugin (official pnpm path) ----------------------------
 echo "[1/4] installing plugin via dsh plugin (pnpm)..."
 if command -v dsh >/dev/null 2>&1; then
-  dsh plugin --profile web add "$SCRIPT_DIR" 2>&1 || dsh plugin --profile web add "github:dcrzsy/dsh-dsh-enhance-tool" 2>&1
+  dsh plugin --profile web add "$SCRIPT_DIR" 2>&1 || dsh plugin --profile web add "github:dcrzsy/dsh-enhance-tool" 2>&1
 else
   # Fallback: manual copy (works without the dsh CLI)
   echo "  dsh CLI not found — copying plugin files directly"
