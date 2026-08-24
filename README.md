@@ -1,4 +1,4 @@
-# harness-ui-enhancer
+# dsh-enhance-tool
 
 DeepSeek Harness (`dsh`) web 界面增强插件 — 润色、提示词库、预测回复、宽度/字号设置、MCP 与定时自动化面板。
 
@@ -13,7 +13,7 @@ DeepSeek Harness (`dsh`) web 界面增强插件 — 润色、提示词库、预�
 ### 方式一：dsh 官方插件命令（推荐）
 
 ```bash
-dsh plugin --profile web add github:dcrzsy/dsh-harness-ui-enhancer
+dsh plugin --profile web add github:dcrzsy/dsh-dsh-enhance-tool
 ```
 
 安装后需要补一个 pnpm 解析不到的依赖（它位于全局 dsh 包内）：
@@ -30,8 +30,8 @@ ln -sfn "$DSH/node_modules/@deepseek-ai/dsh-session-title-llm"    ~/.dsh/profile
 ### 方式二：一键脚本
 
 ```bash
-git clone https://github.com/dcrzsy/dsh-harness-ui-enhancer
-cd dsh-harness-ui-enhancer
+git clone https://github.com/dcrzsy/dsh-dsh-enhance-tool
+cd dsh-dsh-enhance-tool
 bash install.sh
 ```
 
@@ -46,7 +46,7 @@ fuser -k 3080/tcp && nohup dsh web &   # 重启 dsh web
 浏览器 **Ctrl+Shift+R** 硬刷新即可。
 
 > 插件通过自带的 `cordis.patch.yml`（`dsh.bundle.patch`）自动挂载，无需手动改配置。
-> 卸载：`dsh plugin --profile web remove harness-ui-enhancer` 后重启 dsh web。
+> 卸载：`dsh plugin --profile web remove dsh-enhance-tool` 后重启 dsh web。
 
 ---
 
@@ -128,7 +128,7 @@ curl -s -X POST http://127.0.0.1:3080/polish -H "content-type: application/json"
 
 ## 开发
 
-插件本体在 `harness-ui-enhancer/`：
+插件本体在 `dsh-enhance-tool/`：
 
 ```
 .

@@ -5,6 +5,6 @@
 #    (restate-override: later patch rows win per id).
 - insert:
     - id: ui-enhancer
-      name: harness-ui-enhancer
+      name: dsh-enhance-tool
 - id: session-title-llm
   disabled: true

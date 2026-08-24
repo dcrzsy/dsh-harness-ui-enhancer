@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# harness-ui-enhancer — one-command installer for DeepSeek Harness (dsh) web
+# dsh-enhance-tool — one-command installer for DeepSeek Harness (dsh) web
 #
 #   Standard install: adds the plugin via the official `dsh plugin` (pnpm) path,
 #   then links the @deepseek-ai/dsh-session-title-llm dependency (which pnpm
@@ -56,17 +56,17 @@ DSH_DEPS="$DSH_GLOBAL/node_modules/@deepseek-ai"
 # ---- 3. Install the plugin (official pnpm path) ----------------------------
 echo "[1/4] installing plugin via dsh plugin (pnpm)..."
 if command -v dsh >/dev/null 2>&1; then
-  dsh plugin --profile web add "$SCRIPT_DIR" 2>&1 || dsh plugin --profile web add "github:dcrzsy/dsh-harness-ui-enhancer" 2>&1
+  dsh plugin --profile web add "$SCRIPT_DIR" 2>&1 || dsh plugin --profile web add "github:dcrzsy/dsh-dsh-enhance-tool" 2>&1
 else
   # Fallback: manual copy (works without the dsh CLI)
   echo "  dsh CLI not found — copying plugin files directly"
-  mkdir -p "$NM/harness-ui-enhancer"
-  cp -f "$PLUGIN_DIR/package.json"      "$NM/harness-ui-enhancer/package.json"
-  cp -f "$PLUGIN_DIR/cordis.patch.yml"  "$NM/harness-ui-enhancer/cordis.patch.yml"
-  mkdir -p "$NM/harness-ui-enhancer/lib"
-  cp -f "$PLUGIN_DIR/lib/index.js"         "$NM/harness-ui-enhancer/lib/index.js"
-  cp -f "$PLUGIN_DIR/lib/client.js"        "$NM/harness-ui-enhancer/lib/client.js"
-  cp -f "$PLUGIN_DIR/lib/polish-routes.js" "$NM/harness-ui-enhancer/lib/polish-routes.js"
+  mkdir -p "$NM/dsh-enhance-tool"
+  cp -f "$PLUGIN_DIR/package.json"      "$NM/dsh-enhance-tool/package.json"
+  cp -f "$PLUGIN_DIR/cordis.patch.yml"  "$NM/dsh-enhance-tool/cordis.patch.yml"
+  mkdir -p "$NM/dsh-enhance-tool/lib"
+  cp -f "$PLUGIN_DIR/lib/index.js"         "$NM/dsh-enhance-tool/lib/index.js"
+  cp -f "$PLUGIN_DIR/lib/client.js"        "$NM/dsh-enhance-tool/lib/client.js"
+  cp -f "$PLUGIN_DIR/lib/polish-routes.js" "$NM/dsh-enhance-tool/lib/polish-routes.js"
 fi
 
 # ---- 4. Link the session-title dependency -----------------------------------
@@ -83,7 +83,7 @@ done
 
 # ---- 5. Syntax check --------------------------------------------------------
 echo "[3/4] verifying plugin files..."
-for f in "$NM/harness-ui-enhancer/lib/index.js" "$NM/harness-ui-enhancer/lib/polish-routes.js" "$NM/harness-ui-enhancer/lib/client.js"; do
+for f in "$NM/dsh-enhance-tool/lib/index.js" "$NM/dsh-enhance-tool/lib/polish-routes.js" "$NM/dsh-enhance-tool/lib/client.js"; do
   node --check "$f"
 done
 echo "  all files parse OK"
@@ -97,4 +97,4 @@ echo "  2. hard-refresh the browser (Ctrl+Shift+R)"
 echo ""
 echo "Notes:"
 echo "  - Plugin patches mount automatically via its own cordis.patch.yml (bundle.patch)."
-echo "  - Uninstall: delete $NM/harness-ui-enhancer and restart dsh web."
+echo "  - Uninstall: delete $NM/dsh-enhance-tool and restart dsh web."
